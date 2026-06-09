@@ -70,7 +70,7 @@ def fetch_and_sync_internships():
                     site_name=[site],
                     search_term=role_keyword,
                     location="India",
-                    results_wanted=15,  # Balanced and safe volume per category pass
+                    results_wanted=20,  # Optimized 20-job quota per run execution
                     hours_old=72,       # Pulls fresh listings from the last 3 days
                     country_shortcut="india"
                 )
@@ -117,12 +117,15 @@ def fetch_and_sync_internships():
         print("\n📭 Scraping process finished. Total fresh entries across all configurations: 0")
         return
 
-    print(f"\n📤 Scrape sequence complete! Syncing {len(listings_to_insert)} diversified rows to Supabase...")
+    print(f"\n📤 Scrape sequence complete! Syncing {len(listings_to_insert)} unique rows to Supabase...")
     
-    # EXECUTE BATCH BULK INSERT
+    # ⚡ EXECUTING DE-DUPLICATED SMART UPSERT
     try:
-        supabase.table("listings").insert(listings_to_insert).execute()
-        print(f"✨ Success! Database sync complete. Multi-source engine layout fully finalized.")
+        supabase.table("listings").upsert(
+            listings_to_insert,
+            on_conflict="company,role,link"  # Catches overlaps across your core database identifiers!
+        ).execute()
+        print(f"✨ Success! Database sync complete. All duplicate roles filtered and blocked.")
     except Exception as e:
         print(f"❌ Database insertion failed: {e}")
 
