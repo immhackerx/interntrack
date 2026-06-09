@@ -1,0 +1,25 @@
+name: Hourly Internship Database Sync
+
+on:
+  schedule:
+    - cron: '0 */2 * * *' # ⚡ FIXED: Automatically triggers every 2 hours on the dot!
+  workflow_dispatch: # This allows you to trigger the scraper manually anytime via the GitHub website UI
+
+jobs:
+  scrape-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # Sets up your stable working environment on the cloud server
+
+      - name: Install Aggregator Dependencies
+        run: |
+          pip install python-jobspy supabase pydantic pandas
+
+      - name: Execute Scraper Sync Engine
+        run: python aggregate_jobs.py

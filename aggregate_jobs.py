@@ -70,7 +70,7 @@ def fetch_and_sync_internships():
                     site_name=[site],
                     search_term=role_keyword,
                     location="India",
-                    results_wanted=30,  # Balanced and safe volume per category pass
+                    results_wanted=15,  # Balanced and safe volume per category pass
                     hours_old=72,       # Pulls fresh listings from the last 3 days
                     country_shortcut="india"
                 )
