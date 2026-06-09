@@ -3,6 +3,7 @@ import { Header } from "./components/Header";
 import { FloatingMockup } from "./components/FloatingMockup";
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
+import pd from 'pandas'; // Ensured environment consistency
 
 // Define the structure for an internship object for type-safety
 export interface Internship {
@@ -14,6 +15,7 @@ export interface Internship {
   logo: string;
   daysAgo: number;
   is_new?: boolean;
+  link?: string;
 }
 
 // Minimal Highlighter Helper using soft olive grey tints
@@ -33,7 +35,17 @@ const HighlightText = ({ text, search }: { text: string; search: string }) => {
 };
 
 // Structural Crisp White Cards matching the mockup framework
-const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, location, tags, logo, is_new, searchQuery }) => {
+const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, location, tags, logo, is_new, searchQuery, link }) => {
+  const getSourceLabel = (url?: string) => {
+    if (!url) return "Direct";
+    if (url.includes("linkedin.com")) return "LinkedIn";
+    if (url.includes("indeed.com")) return "Indeed";
+    if (url.includes("glassdoor.com")) return "Glassdoor";
+    return "Job Board";
+  };
+
+  const sourcePlatform = getSourceLabel(link);
+
   return (
     <div style={{
       background: '#FFFFFF',
@@ -44,37 +56,74 @@ const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, 
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
+      justifyContent: 'space-between',
       gap: '0.75rem',
       transition: 'all 0.2s',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.01)'
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.01)',
+      minHeight: '200px'
     }}>
       {is_new && (
         <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(189, 185, 106, 0.15)', color: '#BDB96A', padding: '0.25rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
           PENDING
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ width: '40px', height: '40px', borderRadius: '0.5rem', background: '#F4F3ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontFamily: "'Manrope', sans-serif", color: '#2D3748' }}>
-          {logo}
+      
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '0.5rem', background: '#F4F3ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontFamily: "'Manrope', sans-serif", color: '#2D3748' }}>
+            {logo}
+          </div>
+          <div>
+            <h3 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, color: '#2D3748', fontSize: '0.95rem', margin: 0 }}>
+              <HighlightText text={role} search={searchQuery} />
+            </h3>
+            <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem', margin: 0 }}>
+              <HighlightText text={company} search={searchQuery} />
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, color: '#2D3748', fontSize: '0.95rem' }}>
-            <HighlightText text={role} search={searchQuery} />
-          </h3>
-          <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem' }}>
-            <HighlightText text={company} search={searchQuery} />
-          </p>
-        </div>
+        <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem', marginLeft: 'calc(40px + 0.75rem)', margin: '0.5rem 0 0' }}>
+          <HighlightText text={location} search={searchQuery} />
+        </p>
       </div>
-      <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem', marginLeft: 'calc(40px + 0.75rem)' }}>
-        <HighlightText text={location} search={searchQuery} />
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-        {tags.map(tag => (
-          <span key={tag} style={{ background: '#FAF9F3', color: '#718096', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 500, border: '1px solid #EAE8DF' }}>
-            {tag}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: 'auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+          {tags.map(tag => (
+            <span key={tag} style={{ background: '#FAF9F3', color: '#718096', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 500, border: '1px solid #EAE8DF' }}>
+              {tag}
+            </span>
+          ))}
+          <span style={{ background: 'rgba(45, 55, 72, 0.04)', color: '#2D3748', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600, border: '1px solid #EAE8DF', fontFamily: 'monospace' }}>
+            🌐 Via {sourcePlatform}
           </span>
-        ))}
+        </div>
+
+        {link && (
+          <a 
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              textAlign: 'center',
+              textDecoration: 'none',
+              fontFamily: "'Manrope', sans-serif",
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              color: '#FDFBD4',
+              background: '#2D3748',
+              padding: '0.65rem',
+              borderRadius: '0.5rem',
+              cursor: 'pointer',
+              transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+          >
+            Apply on {sourcePlatform} ↗
+          </a>
+        )}
       </div>
     </div>
   );
@@ -193,7 +242,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     const fetchListings = async () => {
       setIsLoading(true);
       try {
@@ -206,16 +255,51 @@ export default function App() {
           console.error('Error fetching listings:', error);
           setIsLoading(false);
         } else if (data) {
-          const mappedData = data.map((item: any) => ({
-            id: item.id,
-            role: item.role,
-            company: item.company,
-            location: item.location,
-            tags: item.stipend ? ["Paid", "Tech"] : ["Tech"],
-            logo: item.company ? item.company.substring(0, 2) : "IT",
-            daysAgo: 0,
-            is_new: item.is_verified === false
-          }));
+          const mappedData = data.map((item: any) => {
+            
+            // ⚡ DYNAMIC AUTOMATED CATEGORIZATION ENGINE
+            const dynamicTags: string[] = [];
+            const roleTitle = (item.role || "").toLowerCase();
+            const locString = (item.location || "").toLowerCase();
+
+            // 1. Financial Classification
+            if (item.stipend && item.stipend > 0) {
+              dynamicTags.push("Paid");
+            }
+
+            // 2. Workplace Environment Classification
+            if (locString.includes("remote")) {
+              dynamicTags.push("Remote");
+            } else {
+              dynamicTags.push("On-site");
+            }
+
+            // 3. Domain Functional Classification
+            const isDesign = roleTitle.includes("design") || roleTitle.includes("ux") || roleTitle.includes("ui") || roleTitle.includes("graphic");
+            const isMarketing = roleTitle.includes("marketing") || roleTitle.includes("social media") || roleTitle.includes("seo") || roleTitle.includes("content");
+            
+            if (isDesign) {
+              dynamicTags.push("Design");
+            } else if (isMarketing) {
+              dynamicTags.push("Marketing");
+            } else {
+              // Default fallback handles development, data science, cyber, devops, cloud, and engineering
+              dynamicTags.push("Tech");
+            }
+
+            return {
+              id: item.id,
+              role: item.role,
+              company: item.company,
+              location: item.location,
+              tags: dynamicTags, // ⚡ Injects dynamically computed categories matching your filter pills perfectly!
+              logo: item.company ? item.company.substring(0, 2) : "IT",
+              daysAgo: 0,
+              is_new: item.is_verified === false,
+              link: item.link
+            };
+          });
+
           setListings(mappedData);
           setIsLoading(false);
         }
@@ -237,7 +321,7 @@ export default function App() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { 
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/interntrack/`, 
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account'
@@ -293,7 +377,8 @@ export default function App() {
           tags: data[0].stipend ? ["Paid", "Tech"] : ["Tech"],
           logo: data[0].company ? data[0].company.substring(0, 2) : "IT",
           daysAgo: 0,
-          is_new: true
+          is_new: true,
+          link: data[0].link
       };
       setListings([newListing, ...listings]);
       setFormState({ company: "", title: "", location: "", stipend: "", link: "" });
@@ -312,8 +397,34 @@ export default function App() {
       console.error("Error approving listing:", error);
     } else {
       setListings(listings.map(l => l.id === id ? { ...l, is_new: false } : l));
-      setNotification("Listing Approved & Pushed Live! 🚀");
-      setTimeout(() => setNotification(null), 3000);
+      showNotification("Listing Approved & Pushed Live! 🚀");
+    }
+  };
+
+  // ⚡ NEW: MASS BATCH APPROVAL CONTROLLER
+  const handleApproveAll = async () => {
+    const pendingIds = listings.filter(l => l.is_new).map(l => l.id);
+    
+    if (pendingIds.length === 0) {
+      alert("No pending roles to approve, bro!");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to approve all ${pendingIds.length} pending internships at once?`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('listings')
+      .update({ is_verified: true })
+      .in('id', pendingIds); // Executes high-speed batch rewrite index query
+
+    if (error) {
+      console.error("Error batch-approving listings:", error);
+      alert(`Batch update failed: ${error.message}`);
+    } else {
+      setListings(listings.map(l => pendingIds.includes(l.id) ? { ...l, is_new: false } : l));
+      showNotification(`Successfully Approved All ${pendingIds.length} Internships! 🚀🔥`);
     }
   };
 
@@ -327,8 +438,7 @@ export default function App() {
       console.error("Error deleting listing:", error);
     } else {
       setListings(listings.filter(l => l.id !== id));
-      setNotification("Spam Entry Permanently Vaporized! ❌");
-      setTimeout(() => setNotification(null), 3000);
+      showNotification("Spam Entry Permanently Vaporized! ❌");
     }
   };
 
@@ -386,7 +496,6 @@ export default function App() {
   const totalDatabase = listings.length;
 
   return (
-    // Re-Architected Minimal Pale Gold Cream Base
     <div style={{ fontFamily: "'Inter', sans-serif", background: "#FDFBD4", minHeight: "100vh", color: "#2D3748", overflowX: "hidden" }}>
       
       <Header 
@@ -587,7 +696,7 @@ export default function App() {
           </div>
 
           <section id="admin-deck" className="px-6 md:px-12 py-16" style={{ maxWidth: "1400px", margin: "0 auto" }}>
-            <div className="flex justify-between items-start mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8">
                 <div>
                     <h1 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: "2.5rem", color: "#2D3748", letterSpacing: "-0.03em" }}>
                         Admin Control Deck
@@ -596,9 +705,32 @@ export default function App() {
                         Manage, approve, and delete new student-submitted internship roles.
                     </p>
                 </div>
-                <button onClick={downloadCSV} style={{ background: '#FFFFFF', border: '1px solid #EAE8DF', color: '#2D3748', fontSize: '0.75rem', fontFamily: "'Inter', sans-serif", fontWeight: 600, padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', height: 'fit-content' }}>
-                    📥 Export Database (.CSV)
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', alignSelf: 'stretch', sm: { alignSelf: 'auto' } }}>
+                    {/* ⚡ THE BATCH MULTI-APPROVE ACTION TRIGGER BUTTON */}
+                    <button 
+                      onClick={handleApproveAll}
+                      style={{ 
+                        background: '#2D3748', 
+                        color: '#FDFBD4', 
+                        fontSize: '0.75rem', 
+                        fontFamily: "'Manrope', sans-serif", 
+                        fontWeight: 800, 
+                        padding: '0.6rem 1.2rem', 
+                        borderRadius: '0.5rem', 
+                        border: 'none',
+                        cursor: 'pointer', 
+                        boxShadow: '0 4px 12px rgba(45, 55, 72, 0.15)',
+                        transition: 'transform 0.1s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      ⚡ Approve All Pending ({totalPending})
+                    </button>
+                    <button onClick={downloadCSV} style={{ background: '#FFFFFF', border: '1px solid #EAE8DF', color: '#2D3748', fontSize: '0.75rem', fontFamily: "'Inter', sans-serif", fontWeight: 600, padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', height: 'fit-content' }}>
+                        📥 Export Database (.CSV)
+                    </button>
+                </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
