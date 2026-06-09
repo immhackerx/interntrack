@@ -23,7 +23,7 @@ def fetch_and_sync_internships():
                 site_name=[site],
                 search_term="Software Engineer Intern",
                 location="India",
-                results_wanted=15,  # Fetches up to 15 roles PER site now!
+                results_wanted=100,  # Fetches up to 15 roles PER site now!
                 hours_old=72,       # Pulls fresh listings from the last 3 days
                 country_shortcut="india"
             )
