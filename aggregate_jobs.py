@@ -1,5 +1,6 @@
 import os
 import time
+import random  # ⚡ NEW: Imported to shuffle job boards randomly per loop pass
 import pandas as pd
 from datetime import datetime
 from jobspy import scrape_jobs
@@ -14,8 +15,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def fetch_and_sync_internships():
     print("🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine...")
     
-    # 🌐 Targeted platforms (Upgraded to include Naukri and Google Jobs)
-    target_sites = ["linkedin", "indeed", "naukri", "google", "zip_recruiter"]
+    # 🌐 Base source platforms
+    base_sites = ["linkedin", "indeed", "naukri", "google", "zip_recruiter"]
     
     # 🎯 The Absolute Master Index Matrix of Student Internships
     search_keywords = [
@@ -62,6 +63,11 @@ def fetch_and_sync_internships():
     for role_keyword in search_keywords:
         print(f"\n🚀 Starting search sequence for category: [{role_keyword.upper()}]")
         
+        # ⚡ NEW: Shuffle the target board order dynamically for every keyword path pass
+        target_sites = base_sites.copy()
+        random.shuffle(target_sites)
+        print(f"🔀 Randomized scraping order for this pass: {[s.upper() for s in target_sites]}")
+        
         # 🔁 Inner Loop: Query platforms one by one
         for site in target_sites:
             print(f"  🔍 Querying {site.upper()} for '{role_keyword}'...")
@@ -106,8 +112,9 @@ def fetch_and_sync_internships():
                     }
                     listings_to_insert.append(job_data)
                     
-                # ⏱️ Short pause to stay safe from bot detection filters
-                time.sleep(1.5)
+                # ⏱️ UPDATED: Shifted to a random pause range between 2.5 and 5.0 seconds to cleanly bypass scraping triggers
+                sleep_interval = random.uniform(2.5, 5.0)
+                time.sleep(sleep_interval)
                     
             except Exception as e:
                 print(f"  ⚠️ Skipping {site.upper()} momentarily: {e}")
