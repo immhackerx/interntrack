@@ -17,9 +17,9 @@ jobs:
         with:
           python-version: '3.12' # Sets up your stable working environment on the cloud server
 
-      - name: Install Aggregator Dependencies
+     - name: Install Aggregator Dependencies
         run: |
-          pip install python-jobspy supabase pydantic pandas
+          pip install python-jobspy supabase pydantic pandas requests
 
       - name: Execute Scraper Sync Engine
         run: python aggregate_jobs.py

@@ -1,7 +1,8 @@
 import os
 import time
-import random  # ⚡ NEW: Imported to shuffle job boards randomly per loop pass
+import random
 import pandas as pd
+import requests  # ⚡ NEW: Imported to ping and validate active URL health statuses
 from datetime import datetime
 from jobspy import scrape_jobs
 from supabase import create_client, Client
@@ -12,8 +13,70 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+def purge_expired_listings():
+    print("\n🧹 Initiating Expired Link Validation & Purge Cycle...")
+    try:
+        # Fetch every active listing link stored in the database
+        response = supabase.table("listings").select("id", "role", "company", "link").execute()
+        active_listings = response.data
+        
+        if not active_listings:
+            print("📭 No active rows found in database to check.")
+            return
+
+        print(f"🕵️‍♂️ Scanning {len(active_listings)} total database entries for dead or expired links...")
+        dead_row_ids = []
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        for item in active_listings:
+            url = item.get("link")
+            row_id = item.get("id")
+            
+            if not url or not url.startswith("http"):
+                continue
+
+            try:
+                # Use a fast HEAD request to grab the response code without parsing full HTML weights
+                res = requests.head(url, headers=headers, timeout=6, allow_redirects=True)
+                
+                # Check for absolute dead statuses (404, 410)
+                if res.status_code in [404, 410]:
+                    print(f"  ❌ DEAD LINK: [{item['company']}] {item['role']} -> Status {res.status_code}")
+                    dead_row_ids.append(row_id)
+                
+                # Check for dead board redirects (e.g., LinkedIn pushing a filled job view back to generic searches)
+                elif "linkedin.com/jobs/view" in url and "linkedin.com/jobs/search" in res.url:
+                    print(f"  ❌ EXPIRED REDIRECT: [{item['company']}] {item['role']} (Job Filled/Removed)")
+                    dead_row_ids.append(row_id)
+
+            except requests.RequestException:
+                # If a host completely times out or fails connection resolution, flag it for purging
+                print(f"  ❌ UNREACHABLE DOMAIN: [{item['company']}] {item['role']}")
+                dead_row_ids.append(row_id)
+            
+            # Short split-second break to space out validation traffic patterns nicely
+            time.sleep(0.15)
+
+        # Batch execute the delete query for all compiled dead elements
+        if dead_row_ids:
+            print(f"\n🗑️ Vaporizing {len(dead_row_ids)} dead/expired rows from Supabase...")
+            supabase.table("listings").delete().in_("id", dead_row_ids).execute()
+            print("✨ Database successfully scrubbed clean of ghost postings!")
+        else:
+            print("✅ All active internship links tested pristine and live!")
+
+    except Exception as e:
+        print(f"⚠️ Link validation manager crashed: {e}")
+
+
 def fetch_and_sync_internships():
-    print("🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine...")
+    # ⚡ STEP 1: Execute deep data cleanup before running scraper streams
+    purge_expired_listings()
+    
+    print("\n🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine...")
     
     # 🌐 Base source platforms
     base_sites = ["linkedin", "indeed", "naukri", "google", "zip_recruiter"]
