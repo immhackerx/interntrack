@@ -4,7 +4,10 @@ import { FloatingMockup } from "./components/FloatingMockup";
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import pd from 'pandas'; // Ensured environment consistency
-
+import { ListingDetailPanel } from './components/ListingDetailPanel';
+import { ListingGrid } from './components/ListingGrid';
+import { KanbanBoard } from './components/KanbanBoard';
+import { useAppContext } from './store/AppContext';
 // Define the structure for an internship object for type-safety
 export interface Internship {
   id: number;
@@ -16,118 +19,10 @@ export interface Internship {
   daysAgo: number;
   is_new?: boolean;
   link?: string;
+  apply_count?: number;
 }
 
-// Minimal Highlighter Helper using soft olive grey tints
-const HighlightText = ({ text, search }: { text: string; search: string }) => {
-  if (!search.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        regex.test(part)
-          ? <mark key={i} style={{ background: 'rgba(189, 185, 106, 0.25)', color: '#2D3748', borderRadius: '0.25rem', padding: '0 0.15rem', fontWeight: 600 }}>{part}</mark>
-          : part
-      )}
-    </span>
-  );
-};
-
-// Structural Crisp White Cards matching the mockup framework
-const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, location, tags, logo, is_new, searchQuery, link }) => {
-  const getSourceLabel = (url?: string) => {
-    if (!url) return "Direct";
-    if (url.includes("linkedin.com")) return "LinkedIn";
-    if (url.includes("indeed.com")) return "Indeed";
-    if (url.includes("glassdoor.com")) return "Glassdoor";
-    return "Job Board";
-  };
-
-  const sourcePlatform = getSourceLabel(link);
-
-  return (
-    <div style={{
-      background: '#FFFFFF',
-      border: '1px solid #EAE8DF',
-      borderRadius: '0.75rem',
-      padding: '1.25rem',
-      position: 'relative',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'space-between',
-      gap: '0.75rem',
-      transition: 'all 0.2s',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.01)',
-      minHeight: '200px'
-    }}>
-      {is_new && (
-        <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(189, 185, 106, 0.15)', color: '#BDB96A', padding: '0.25rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>
-          PENDING
-        </div>
-      )}
-
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '0.5rem', background: '#F4F3ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontFamily: "'Manrope', sans-serif", color: '#2D3748' }}>
-            {logo}
-          </div>
-          <div>
-            <h3 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, color: '#2D3748', fontSize: '0.95rem', margin: 0 }}>
-              <HighlightText text={role} search={searchQuery} />
-            </h3>
-            <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem', margin: 0 }}>
-              <HighlightText text={company} search={searchQuery} />
-            </p>
-          </div>
-        </div>
-        <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', fontSize: '0.8rem', marginLeft: 'calc(40px + 0.75rem)', margin: '0.5rem 0 0' }}>
-          <HighlightText text={location} search={searchQuery} />
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: 'auto' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-          {tags.map(tag => (
-            <span key={tag} style={{ background: '#FAF9F3', color: '#718096', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 500, border: '1px solid #EAE8DF' }}>
-              {tag}
-            </span>
-          ))}
-          <span style={{ background: 'rgba(45, 55, 72, 0.04)', color: '#2D3748', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600, border: '1px solid #EAE8DF', fontFamily: 'monospace' }}>
-            🌐 Via {sourcePlatform}
-          </span>
-        </div>
-
-        {link && (
-          <a
-            href={link}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              textAlign: 'center',
-              textDecoration: 'none',
-              fontFamily: "'Manrope', sans-serif",
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              color: '#FDFBD4',
-              background: '#2D3748',
-              padding: '0.65rem',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              transition: 'opacity 0.2s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-          >
-            Apply on {sourcePlatform} ↗
-          </a>
-        )}
-      </div>
-    </div>
-  );
-};
+import { ListingCard } from './components/ListingCard';
 
 // Modal component for submitting a new internship
 const SubmissionModal: FC<{
@@ -223,10 +118,11 @@ export default function App() {
     stipend: "",
     link: ""
   });
-  const [view, setView] = useState<"public" | "admin">("public");
+  const [view, setView] = useState<"public" | "admin" | "kanban">("public");
   const [notification, setNotification] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [session, setSession] = useState<Session | null>(null);
+  const { activeListing } = useAppContext();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -296,7 +192,8 @@ export default function App() {
               logo: item.company ? item.company.substring(0, 2) : "IT",
               daysAgo: 0,
               is_new: item.is_verified === false,
-              link: item.link
+              link: item.link,
+              apply_count: item.apply_count || 0
             };
           });
 
@@ -309,6 +206,27 @@ export default function App() {
       }
     };
     fetchListings();
+
+    const listingsSubscription = supabase
+      .channel('public:listings')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'listings' },
+        (payload) => {
+          setListings(currentListings => 
+            currentListings.map(listing => 
+              listing.id === payload.new.id 
+                ? { ...listing, apply_count: payload.new.apply_count }
+                : listing
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(listingsSubscription);
+    };
   }, []);
 
   const showNotification = (message: string) => {
@@ -505,7 +423,7 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {view === 'public' ? (
+      {view !== 'admin' ? (
         <div>
           <div style={{ background: '#FFFFFF', borderBottom: '1px solid #EAE8DF', padding: '0.75rem 2rem', marginTop: '70px' }}>
             <div style={{ maxWidth: "1400px", margin: "0 auto", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -616,65 +534,60 @@ export default function App() {
           </div>
 
           <div className="px-6 md:px-12 py-5" style={{ maxWidth: "1400px", margin: "0 auto" }}>
-            <div className="flex flex-wrap gap-2">
-              {FILTERS.map((f) => (
-                <button key={f} onClick={() => setActiveFilter(f)}
-                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: activeFilter === f ? 600 : 500, fontSize: "0.78rem", borderRadius: "999px", padding: "0.4rem 1rem", cursor: "pointer", background: activeFilter === f ? "#2D3748" : "#FFFFFF", color: activeFilter === f ? "#FDFBD4" : "#718096", border: "1.5px solid #EAE8DF" }}>
-                  {f}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-2">
+                {FILTERS.map((f) => (
+                  <button key={f} onClick={() => setActiveFilter(f)}
+                    className={`font-inter font-medium text-[0.78rem] rounded-full px-4 py-1.5 cursor-pointer border-[1.5px] transition-colors
+                      ${activeFilter === f 
+                        ? 'bg-slate-800 text-[#FDFBD4] border-slate-800 dark:bg-emerald-500 dark:text-slate-900 dark:border-emerald-500' 
+                        : 'bg-white text-slate-500 border-[#EAE8DF] dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl self-start">
+                <button
+                  onClick={() => setView('public')}
+                  className={`px-4 py-2 rounded-lg font-manrope font-bold text-sm transition-all ${view === 'public' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Grid View
                 </button>
-              ))}
+                <button
+                  onClick={() => setView('kanban')}
+                  className={`px-4 py-2 rounded-lg font-manrope font-bold text-sm transition-all ${view === 'kanban' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  My Application Tracker
+                </button>
+              </div>
             </div>
           </div>
 
-          <section id="listings-grid" className="px-6 md:px-12 pb-24" style={{ maxWidth: "1400px", margin: "0 auto" }}>
-            {isLoading ? (
-              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))" }}>
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div key={index} style={{
-                    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #EAE8DF',
-                    borderRadius: '0.75rem',
-                    height: '140px',
-                    width: '100%'
-                  }} />
-                ))}
+          <section id="workspace" className="px-6 md:px-12 pb-24" style={{ maxWidth: "1400px", margin: "0 auto" }}>
+            {view === 'public' && (
+              <div className="flex flex-col lg:flex-row gap-6 relative">
+                <ListingGrid 
+                  isLoading={isLoading} 
+                  publicListings={publicListings} 
+                  search={search} 
+                  setActiveFilter={setActiveFilter} 
+                  setSearch={setSearch} 
+                />
+                
+                {/* Right Split Pane / Detail Drawer */}
+                {activeListing && (
+                  <div className="hidden lg:block lg:w-1/3 shrink-0">
+                    <ListingDetailPanel />
+                  </div>
+                )}
               </div>
-            ) : publicListings.length > 0 ? (
-              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))" }}>
-                {publicListings.map((listing) => (<ListingCard key={listing.id} {...listing} searchQuery={search} />))}
-              </div>
-            ) : (
-              <div className="text-center py-16" style={{ background: '#FFFFFF', borderRadius: '1rem', border: '1px solid #EAE8DF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: "#FDFBD4", border: "1px solid #EAE8DF" }}>
-                  <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#718096" strokeWidth={1.5}>
-                    <circle cx="11" cy="11" r="8" />
-                    <path strokeLinecap="round" d="m21 21-4.35-4.35" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: "1.1rem", color: "#2D3748" }}>
-                    No internships found matching your criteria
-                  </h3>
-                  <p style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: "0.85rem", color: '#718096', maxWidth: '380px', margin: '0.5rem auto 0' }}>
-                    Try checking your spelling, adjusting your keywords, or clearing your active filters to see more roles.
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setSearch('');
-                    setActiveFilter('All');
-                  }}
-                  style={{
-                    marginTop: '0.5rem', fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: '0.8rem',
-                    color: "#2D3748", background: "#FDFBD4", borderRadius: "0.5rem",
-                    padding: "0.6rem 1.2rem", border: "1px solid #EAE8DF", cursor: "pointer",
-                    transition: 'background-color 0.2s'
-                  }}
-                >
-                  Clear Search Queries
-                </button>
-              </div>
+            )}
+
+            {view === 'kanban' && (
+              <KanbanBoard />
             )}
           </section>
         </div>

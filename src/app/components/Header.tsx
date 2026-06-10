@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Session } from '@supabase/supabase-js';
-
+import { ThemeToggle } from './ThemeToggle';
 interface HeaderProps {
   onOpenModal: () => void;
   session: Session | null;
@@ -51,17 +51,7 @@ export function Header({ onOpenModal, session, onGoogleSignIn, onLogout }: Heade
 
       {/* CTAs — desktop */}
       <div className="hidden md:flex items-center gap-3">
-        {mounted && (
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            style={{
-              background: "transparent", border: "none", cursor: "pointer", fontSize: "1.2rem",
-              marginRight: "0.5rem", color: "var(--foreground)"
-            }}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        )}
+        <ThemeToggle />
         {session ? (
           <div className="flex items-center gap-4">
             <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.875rem", color: "var(--foreground)", fontWeight: 700 }}>

@@ -1,13 +1,15 @@
 
   import { createRoot } from "react-dom/client";
-  import App from "./app/App.tsx";
-  import "./styles/index.css";
+import App from "./app/App.tsx";
+import "./styles/index.css";
+import { ThemeProvider } from "next-themes";
+import { AppProvider } from "./app/store/AppContext";
 
-  import { ThemeProvider } from "next-themes";
-
-  createRoot(document.getElementById("root")!).render(
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+createRoot(document.getElementById("root")!).render(
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+    <AppProvider>
       <App />
-    </ThemeProvider>
-  );
+    </AppProvider>
+  </ThemeProvider>
+);
   
