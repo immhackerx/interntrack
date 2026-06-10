@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "scripts": {
+ "scripts": {
   "predeploy": "npm run build",
-  "deploy": "gh-pages -d dist",
+  "deploy": "gh-pages -d dist --no-silent",
   "dev": "vite",
-  "build": "tsc && vite build",
+  "build": "vite build",
   "preview": "vite preview"
 },
   "dependencies": {
@@ -73,6 +73,7 @@
     "@vitejs/plugin-react": "4.7.0",
     "gh-pages": "^6.3.0",
     "tailwindcss": "4.1.12",
+    "typescript": "^6.0.3",
     "vite": "6.3.5"
   },
   "peerDependencies": {

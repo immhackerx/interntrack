@@ -27,9 +27,12 @@ def purge_expired_listings():
         print(f"🕵️‍♂️ Scanning {len(active_listings)} total database entries for dead or expired links...")
         dead_row_ids = []
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
+        ]
 
         for item in active_listings:
             url = item.get("link")
@@ -37,6 +40,8 @@ def purge_expired_listings():
             
             if not url or not url.startswith("http"):
                 continue
+
+            headers = {"User-Agent": random.choice(user_agents)}
 
             try:
                 # Use a fast HEAD request to grab the response code without parsing full HTML weights
@@ -52,9 +57,14 @@ def purge_expired_listings():
                     print(f"  ❌ EXPIRED REDIRECT: [{item['company']}] {item['role']} (Job Filled/Removed)")
                     dead_row_ids.append(row_id)
 
-            except requests.RequestException:
-                # If a host completely times out or fails connection resolution, flag it for purging
-                print(f"  ❌ UNREACHABLE DOMAIN: [{item['company']}] {item['role']}")
+            except requests.exceptions.Timeout as e:
+                print(f"  ⏳ TIMEOUT: [{item['company']}] {item['role']} -> {e}")
+                dead_row_ids.append(row_id)
+            except requests.exceptions.ConnectionError as e:
+                print(f"  ❌ CONNECTION ERROR: [{item['company']}] {item['role']} -> {e}")
+                dead_row_ids.append(row_id)
+            except requests.exceptions.RequestException as e:
+                print(f"  ❌ UNREACHABLE DOMAIN: [{item['company']}] {item['role']} -> {e}")
                 dead_row_ids.append(row_id)
             
             # Short split-second break to space out validation traffic patterns nicely
@@ -153,24 +163,30 @@ def fetch_and_sync_internships():
                 for _, row in jobs.iterrows():
                     role = row.get('title')
                     company = row.get('company')
-                    if not role or not company:
+                    if pd.isna(role) or pd.isna(company) or not role or not company:
                         continue
                         
-                    location = f"{row.get('location', 'Remote')}, India" if row.get('location') else "Remote, India"
-                    job_url = row.get('job_url', '')
+                    location_val = row.get('location')
+                    location = f"{location_val}, India" if location_val and not pd.isna(location_val) else "Remote, India"
+                    
+                    job_url = row.get('job_url')
+                    job_url_str = str(job_url) if job_url and not pd.isna(job_url) else ""
                     
                     # Safe NaN evaluation check for numeric fields
                     stipend = 0
                     min_amt = row.get('min_amount')
-                    if min_amt and not pd.isna(min_amt):
-                        stipend = int(min_amt)
+                    if min_amt is not None and not pd.isna(min_amt):
+                        try:
+                            stipend = int(min_amt)
+                        except (ValueError, TypeError):
+                            pass
 
                     job_data = {
                         "role": str(role),
                         "company": str(company),
                         "location": str(location),
                         "stipend": stipend,
-                        "link": str(job_url),
+                        "link": job_url_str,
                         "is_verified": False  # Headed straight to your priyanshu2026 admin panel review stream
                     }
                     listings_to_insert.append(job_data)
@@ -187,12 +203,20 @@ def fetch_and_sync_internships():
         print("\n📭 Scraping process finished. Total fresh entries across all configurations: 0")
         return
 
-    print(f"\n📤 Scrape sequence complete! Syncing {len(listings_to_insert)} unique rows to Supabase...")
+    # De-duplicate the batch itself to prevent PostgreSQL unique constraint errors
+    unique_listings = {}
+    for job in listings_to_insert:
+        key = (job["company"], job["role"], job["link"])
+        unique_listings[key] = job
+    
+    deduped_listings_to_insert = list(unique_listings.values())
+
+    print(f"\n📤 Scrape sequence complete! Syncing {len(deduped_listings_to_insert)} unique rows to Supabase...")
     
     # ⚡ EXECUTING DE-DUPLICATED SMART UPSERT
     try:
         supabase.table("listings").upsert(
-            listings_to_insert,
+            deduped_listings_to_insert,
             on_conflict="company,role,link"  # Catches overlaps across your core database identifiers!
         ).execute()
         print(f"✨ Success! Database sync complete. All duplicate roles filtered and blocked.")

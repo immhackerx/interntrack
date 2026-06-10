@@ -67,7 +67,7 @@ const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, 
           PENDING
         </div>
       )}
-      
+
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ width: '40px', height: '40px', borderRadius: '0.5rem', background: '#F4F3ED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontFamily: "'Manrope', sans-serif", color: '#2D3748' }}>
@@ -100,7 +100,7 @@ const ListingCard: FC<Internship & { searchQuery: string }> = ({ role, company, 
         </div>
 
         {link && (
-          <a 
+          <a
             href={link}
             target="_blank"
             rel="noopener noreferrer"
@@ -181,10 +181,10 @@ const SubmissionModal: FC<{
                 type={field === 'Stipend' ? 'number' : 'text'}
                 placeholder={
                   field === 'Company' ? 'e.g., Google' :
-                  field === 'Title' ? 'e.g., Software Engineer Intern' :
-                  field === 'Location' ? 'e.g., San Francisco, CA or Remote' :
-                  field === 'Stipend' ? 'e.g., 5000' :
-                  'https://apply-here.com'
+                    field === 'Title' ? 'e.g., Software Engineer Intern' :
+                      field === 'Location' ? 'e.g., San Francisco, CA or Remote' :
+                        field === 'Stipend' ? 'e.g., 5000' :
+                          'https://apply-here.com'
                 }
                 required
                 style={{
@@ -242,7 +242,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-useEffect(() => {
+  useEffect(() => {
     const fetchListings = async () => {
       setIsLoading(true);
       try {
@@ -250,13 +250,13 @@ useEffect(() => {
           .from('listings')
           .select('*')
           .order('created_at', { ascending: false });
-        
+
         if (error) {
           console.error('Error fetching listings:', error);
           setIsLoading(false);
         } else if (data) {
           const mappedData = data.map((item: any) => {
-            
+
             // ⚡ DYNAMIC AUTOMATED CATEGORIZATION ENGINE
             const dynamicTags: string[] = [];
             const roleTitle = (item.role || "").toLowerCase();
@@ -277,7 +277,7 @@ useEffect(() => {
             // 3. Domain Functional Classification
             const isDesign = roleTitle.includes("design") || roleTitle.includes("ux") || roleTitle.includes("ui") || roleTitle.includes("graphic");
             const isMarketing = roleTitle.includes("marketing") || roleTitle.includes("social media") || roleTitle.includes("seo") || roleTitle.includes("content");
-            
+
             if (isDesign) {
               dynamicTags.push("Design");
             } else if (isMarketing) {
@@ -320,8 +320,8 @@ useEffect(() => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { 
-          redirectTo: `${window.location.origin}/interntrack/`, 
+        options: {
+          redirectTo: `${window.location.origin}/interntrack/`,
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account'
@@ -370,15 +370,15 @@ useEffect(() => {
       alert(`Submission blocked by database: ${error.message}`);
     } else if (data) {
       const newListing = {
-          id: data[0].id,
-          role: data[0].role,
-          company: data[0].company,
-          location: data[0].location,
-          tags: data[0].stipend ? ["Paid", "Tech"] : ["Tech"],
-          logo: data[0].company ? data[0].company.substring(0, 2) : "IT",
-          daysAgo: 0,
-          is_new: true,
-          link: data[0].link
+        id: data[0].id,
+        role: data[0].role,
+        company: data[0].company,
+        location: data[0].location,
+        tags: data[0].stipend ? ["Paid", "Tech"] : ["Tech"],
+        logo: data[0].company ? data[0].company.substring(0, 2) : "IT",
+        daysAgo: 0,
+        is_new: true,
+        link: data[0].link
       };
       setListings([newListing, ...listings]);
       setFormState({ company: "", title: "", location: "", stipend: "", link: "" });
@@ -389,9 +389,9 @@ useEffect(() => {
 
   const handleApprove = async (id: number) => {
     const { error } = await supabase
-        .from('listings')
-        .update({ is_verified: true })
-        .eq('id', id);
+      .from('listings')
+      .update({ is_verified: true })
+      .eq('id', id);
 
     if (error) {
       console.error("Error approving listing:", error);
@@ -404,7 +404,7 @@ useEffect(() => {
   // ⚡ NEW: MASS BATCH APPROVAL CONTROLLER
   const handleApproveAll = async () => {
     const pendingIds = listings.filter(l => l.is_new).map(l => l.id);
-    
+
     if (pendingIds.length === 0) {
       alert("No pending roles to approve, bro!");
       return;
@@ -430,10 +430,10 @@ useEffect(() => {
 
   const handleDelete = async (id: number) => {
     const { error } = await supabase
-        .from('listings')
-        .delete()
-        .eq('id', id);
-    
+      .from('listings')
+      .delete()
+      .eq('id', id);
+
     if (error) {
       console.error("Error deleting listing:", error);
     } else {
@@ -452,10 +452,10 @@ useEffect(() => {
       alert("Access Denied: Invalid Master Credentials.");
     }
   };
-  
+
   const downloadCSV = () => {
     const headers = "ID,Company,Role,Location,Tags,Status";
-    const rows = listings.map(l => 
+    const rows = listings.map(l =>
       [
         l.id,
         `"${l.company.replace(/"/g, '""')}"`,
@@ -467,7 +467,7 @@ useEffect(() => {
     );
 
     const csvContent = [headers, ...rows].join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -488,18 +488,18 @@ useEffect(() => {
       l.location.toLowerCase().includes(query);
     return matchesFilter && matchesSearch;
   });
-  
+
   const adminListings = listings.filter(l => l.is_new);
-  
+
   const totalLive = listings.filter(l => !l.is_new).length;
   const totalPending = adminListings.length;
   const totalDatabase = listings.length;
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", background: "#FDFBD4", minHeight: "100vh", color: "#2D3748", overflowX: "hidden" }}>
-      
-      <Header 
-        onOpenModal={handleOpenPostModal} 
+
+      <Header
+        onOpenModal={handleOpenPostModal}
         session={session}
         onGoogleSignIn={handleGoogleSignIn}
         onLogout={handleLogout}
@@ -510,10 +510,10 @@ useEffect(() => {
           <div style={{ background: '#FFFFFF', borderBottom: '1px solid #EAE8DF', padding: '0.75rem 2rem', marginTop: '70px' }}>
             <div style={{ maxWidth: "1400px", margin: "0 auto", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontFamily: "monospace", fontSize: '0.75rem', color: '#718096' }}>⚡ Database Status: Sync Active</span>
-              <button 
+              <button
                 onClick={handleAdminAccess}
-                style={{ 
-                  background: '#2D3748', color: '#FDFBD4', fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: '0.75rem', 
+                style={{
+                  background: '#2D3748', color: '#FDFBD4', fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: '0.75rem',
                   padding: '0.5rem 1.2rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                 }}
@@ -542,19 +542,19 @@ useEffect(() => {
                 InternTrack helps students discover, filter, and organize internship
                 opportunities from top companies — all in one elegant dashboard.
               </p>
-              
+
               <div className="flex flex-wrap items-center gap-4">
                 {session ? (
-                  <a 
+                  <a
                     href="#listings-grid"
-                    style={{ 
-                      fontFamily: "'Manrope', sans-serif", 
-                      fontWeight: 700, 
-                      fontSize: "0.9rem", 
-                      color: "#FFFFFF", 
-                      background: "#2D3748", 
-                      borderRadius: "999px", 
-                      padding: "0.75rem 1.9rem", 
+                    style={{
+                      fontFamily: "'Manrope', sans-serif",
+                      fontWeight: 700,
+                      fontSize: "0.9rem",
+                      color: "#FFFFFF",
+                      background: "#2D3748",
+                      borderRadius: "999px",
+                      padding: "0.75rem 1.9rem",
                       textDecoration: "none",
                       display: "inline-block",
                       boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
@@ -566,20 +566,20 @@ useEffect(() => {
                     Open Dashboard 👇
                   </a>
                 ) : (
-                  <button 
-                    onClick={handleGoogleSignIn} 
-                    style={{ 
-                      fontFamily: "'Manrope', sans-serif", 
-                      fontWeight: 700, 
-                      fontSize: "0.9rem", 
-                      color: "#FFFFFF", 
-                      background: "#2D3748", 
-                      borderRadius: "999px", 
-                      padding: "0.75rem 1.9rem", 
-                      border: "none", 
-                      cursor: "pointer", 
+                  <button
+                    onClick={handleGoogleSignIn}
+                    style={{
+                      fontFamily: "'Manrope', sans-serif",
+                      fontWeight: 700,
+                      fontSize: "0.9rem",
+                      color: "#FFFFFF",
+                      background: "#2D3748",
+                      borderRadius: "999px",
+                      padding: "0.75rem 1.9rem",
+                      border: "none",
+                      cursor: "pointer",
                       boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
-                      transition: "transform 0.2s" 
+                      transition: "transform 0.2s"
                     }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)"; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
@@ -587,7 +587,7 @@ useEffect(() => {
                     Get Started
                   </button>
                 )}
-                
+
                 {!session && (
                   <a href="#listings-grid" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: "0.875rem", color: '#718096', textDecoration: "none", display: "flex", alignItems: "center", gap: "4px" }}>
                     Explore Listings →
@@ -625,7 +625,7 @@ useEffect(() => {
               ))}
             </div>
           </div>
-          
+
           <section id="listings-grid" className="px-6 md:px-12 pb-24" style={{ maxWidth: "1400px", margin: "0 auto" }}>
             {isLoading ? (
               <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))" }}>
@@ -642,7 +642,7 @@ useEffect(() => {
               </div>
             ) : publicListings.length > 0 ? (
               <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))" }}>
-                {publicListings.map((listing) => ( <ListingCard key={listing.id} {...listing} searchQuery={search} /> ))}
+                {publicListings.map((listing) => (<ListingCard key={listing.id} {...listing} searchQuery={search} />))}
               </div>
             ) : (
               <div className="text-center py-16" style={{ background: '#FFFFFF', borderRadius: '1rem', border: '1px solid #EAE8DF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
@@ -683,10 +683,10 @@ useEffect(() => {
           <div style={{ background: '#FFFFFF', borderBottom: '1px solid #EAE8DF', padding: '0.75rem 2rem', marginTop: '70px' }}>
             <div style={{ maxWidth: "1400px", margin: "0 auto", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontFamily: "monospace", fontSize: '0.75rem', color: '#718096' }}>🔧 Admin Control Workspace</span>
-              <button 
+              <button
                 onClick={() => setView('public')}
-                style={{ 
-                  background: '#2D3748', color: '#FDFBD4', fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: '0.75rem', 
+                style={{
+                  background: '#2D3748', color: '#FDFBD4', fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: '0.75rem',
                   padding: '0.5rem 1.2rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer'
                 }}
               >
@@ -697,42 +697,42 @@ useEffect(() => {
 
           <section id="admin-deck" className="px-6 md:px-12 py-16" style={{ maxWidth: "1400px", margin: "0 auto" }}>
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8">
-                <div>
-                    <h1 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: "2.5rem", color: "#2D3748", letterSpacing: "-0.03em" }}>
-                        Admin Control Deck
-                    </h1>
-                    <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', marginTop: '0.25rem' }}>
-                        Manage, approve, and delete new student-submitted internship roles.
-                    </p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem', alignSelf: 'stretch', sm: { alignSelf: 'auto' } }}>
-                    {/* ⚡ THE BATCH MULTI-APPROVE ACTION TRIGGER BUTTON */}
-                    <button 
-                      onClick={handleApproveAll}
-                      style={{ 
-                        background: '#2D3748', 
-                        color: '#FDFBD4', 
-                        fontSize: '0.75rem', 
-                        fontFamily: "'Manrope', sans-serif", 
-                        fontWeight: 800, 
-                        padding: '0.6rem 1.2rem', 
-                        borderRadius: '0.5rem', 
-                        border: 'none',
-                        cursor: 'pointer', 
-                        boxShadow: '0 4px 12px rgba(45, 55, 72, 0.15)',
-                        transition: 'transform 0.1s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      ⚡ Approve All Pending ({totalPending})
-                    </button>
-                    <button onClick={downloadCSV} style={{ background: '#FFFFFF', border: '1px solid #EAE8DF', color: '#2D3748', fontSize: '0.75rem', fontFamily: "'Inter', sans-serif", fontWeight: 600, padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', height: 'fit-content' }}>
-                        📥 Export Database (.CSV)
-                    </button>
-                </div>
+              <div>
+                <h1 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: "2.5rem", color: "#2D3748", letterSpacing: "-0.03em" }}>
+                  Admin Control Deck
+                </h1>
+                <p style={{ fontFamily: "'Inter', sans-serif", color: '#718096', marginTop: '0.25rem' }}>
+                  Manage, approve, and delete new student-submitted internship roles.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', alignSelf: 'stretch', sm: { alignSelf: 'auto' } }}>
+                {/* ⚡ THE BATCH MULTI-APPROVE ACTION TRIGGER BUTTON */}
+                <button
+                  onClick={handleApproveAll}
+                  style={{
+                    background: '#2D3748',
+                    color: '#FDFBD4',
+                    fontSize: '0.75rem',
+                    fontFamily: "'Manrope', sans-serif",
+                    fontWeight: 800,
+                    padding: '0.6rem 1.2rem',
+                    borderRadius: '0.5rem',
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(45, 55, 72, 0.15)',
+                    transition: 'transform 0.1s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  ⚡ Approve All Pending ({totalPending})
+                </button>
+                <button onClick={downloadCSV} style={{ background: '#FFFFFF', border: '1px solid #EAE8DF', color: '#2D3748', fontSize: '0.75rem', fontFamily: "'Inter', sans-serif", fontWeight: 600, padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', height: 'fit-content' }}>
+                  📥 Export Database (.CSV)
+                </button>
+              </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div style={{ background: '#FFFFFF', border: '1px solid #EAE8DF', padding: '1.25rem', borderRadius: '0.75rem' }}>
                 <p style={{ fontSize: '0.75rem', fontFamily: "'Inter', sans-serif", color: '#718096', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live Directories</p>

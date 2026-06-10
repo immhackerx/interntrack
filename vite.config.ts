@@ -24,9 +24,8 @@ export default defineConfig({
     tailwindcss(),
   ],
 
-  // ⚡ ADDED THIS LINE: Tells Vite to build routes matching your personal GitHub sub-path layout
-  // Replace 'interntrack' with your exact repository name if it's named something else!
-  base: '/interntrack/', 
+  // ⚡ FIXED: Forces Vite to bundle your asset links using the exact repository subfolder path required for GitHub Pages
+  base: '/interntrack/',
 
   resolve: {
     alias: {

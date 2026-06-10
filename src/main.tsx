@@ -3,5 +3,11 @@
   import App from "./app/App.tsx";
   import "./styles/index.css";
 
-  createRoot(document.getElementById("root")!).render(<App />);
+  import { ThemeProvider } from "next-themes";
+
+  createRoot(document.getElementById("root")!).render(
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      <App />
+    </ThemeProvider>
+  );
   
