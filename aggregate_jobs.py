@@ -1,11 +1,13 @@
 import os
 import time
 import random
+import requests
+import concurrent.futures
 import pandas as pd
-import requests  # ⚡ NEW: Imported to ping and validate active URL health statuses
-from datetime import datetime
+from bs4 import BeautifulSoup
 from jobspy import scrape_jobs
 from supabase import create_client, Client
+from datetime import datetime
 
 # 🔑 LIVE SUPABASE CREDENTIALS ENCRYPTED MATRIX
 SUPABASE_URL = "https://vtzbrgcwhvicqpuwlxxc.supabase.co"
@@ -13,10 +15,54 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+SEARCH_KEYWORDS = [
+    # --- Software & Core Tech Track ---
+    "Software Engineer Intern",
+    "Frontend Developer Intern",
+    "Backend Developer Intern",
+    "Full Stack Intern",
+    "Web Development Intern",
+    "Mobile App Intern",
+    "DevOps Intern",
+    "Cybersecurity Intern",
+    
+    # --- AI, Data, & Systems Track ---
+    "Data Science Intern",
+    "Data Analyst Intern",
+    "Machine Learning Intern",
+    "AI Intern",
+    "Cloud Engineer Intern",
+    
+    # --- UI/UX & Creative Design Track ---
+    "UX UI Design Intern",
+    "Product Design Intern",
+    "Graphic Design Intern",
+    "Web Design Intern",
+    
+    # --- Product, Business, & Management Track ---
+    "Product Management Intern",
+    "Business Analyst Intern",
+    "Project Management Intern",
+    "Operations Intern",
+    
+    # --- Growth, Content, & Marketing Track ---
+    "Marketing Intern",
+    "Digital Marketing Intern",
+    "Social Media Intern",
+    "Content Writing Intern",
+    "SEO Intern"
+]
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
+]
+
 def purge_expired_listings():
     print("\n🧹 Initiating Expired Link Validation & Purge Cycle...")
     try:
-        # Fetch every active listing link stored in the database
         response = supabase.table("listings").select("id", "role", "company", "link").execute()
         active_listings = response.data
         
@@ -27,13 +73,6 @@ def purge_expired_listings():
         print(f"🕵️‍♂️ Scanning {len(active_listings)} total database entries for dead or expired links...")
         dead_row_ids = []
 
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"
-        ]
-
         for item in active_listings:
             url = item.get("link")
             row_id = item.get("id")
@@ -41,18 +80,14 @@ def purge_expired_listings():
             if not url or not url.startswith("http"):
                 continue
 
-            headers = {"User-Agent": random.choice(user_agents)}
+            headers = {"User-Agent": random.choice(USER_AGENTS)}
 
             try:
-                # Use a fast HEAD request to grab the response code without parsing full HTML weights
                 res = requests.head(url, headers=headers, timeout=6, allow_redirects=True)
                 
-                # Check for absolute dead statuses (404, 410)
                 if res.status_code in [404, 410]:
                     print(f"  ❌ DEAD LINK: [{item['company']}] {item['role']} -> Status {res.status_code}")
                     dead_row_ids.append(row_id)
-                
-                # Check for dead board redirects (e.g., LinkedIn pushing a filled job view back to generic searches)
                 elif "linkedin.com/jobs/view" in url and "linkedin.com/jobs/search" in res.url:
                     print(f"  ❌ EXPIRED REDIRECT: [{item['company']}] {item['role']} (Job Filled/Removed)")
                     dead_row_ids.append(row_id)
@@ -67,10 +102,8 @@ def purge_expired_listings():
                 print(f"  ❌ UNREACHABLE DOMAIN: [{item['company']}] {item['role']} -> {e}")
                 dead_row_ids.append(row_id)
             
-            # Short split-second break to space out validation traffic patterns nicely
             time.sleep(0.15)
 
-        # Batch execute the delete query for all compiled dead elements
         if dead_row_ids:
             print(f"\n🗑️ Vaporizing {len(dead_row_ids)} dead/expired rows from Supabase...")
             supabase.table("listings").delete().in_("id", dead_row_ids).execute()
@@ -81,143 +114,270 @@ def purge_expired_listings():
     except Exception as e:
         print(f"⚠️ Link validation manager crashed: {e}")
 
+def normalize_job_data(raw_data, source_platform):
+    """
+    Cleans and formats wildly different incoming fields into our standard Supabase schema.
+    Returns None if required fields are missing.
+    """
+    try:
+        role = str(raw_data.get('role', '')).strip()
+        company = str(raw_data.get('company', '')).strip()
+        if not role or not company or role.lower() == 'nan' or company.lower() == 'nan':
+            return None
+            
+        location = str(raw_data.get('location', '')).strip()
+        if not location or location.lower() == 'nan':
+            location = "Remote, India"
+            
+        link = str(raw_data.get('link', '')).strip()
+        if not link or link.lower() == 'nan':
+            return None
+
+        logo = str(raw_data.get('logo', '')).strip()
+        tags = raw_data.get('tags', [])
+        if isinstance(tags, str):
+            tags = [tags]
+            
+        stipend = 0
+        raw_stipend = raw_data.get('stipend', 0)
+        try:
+            if raw_stipend and str(raw_stipend).lower() != 'nan':
+                # Remove currency symbols and commas if present
+                clean_stipend = str(raw_stipend).replace(',', '').replace('₹', '').replace('$', '')
+                stipend = int(float(clean_stipend))
+        except (ValueError, TypeError):
+            pass
+
+        return {
+            "role": role,
+            "company": company,
+            "location": location,
+            "logo": logo if logo and logo.lower() != 'nan' else None,
+            "link": link,
+            "tags": tags,
+            "source": source_platform,
+            "stipend": stipend,
+            "is_verified": False
+        }
+    except Exception as e:
+        print(f"⚠️ Data Normalization Error ({source_platform}): {e}")
+        return None
+
+# --- Platform Scrapers ---
+
+def scrape_jobspy_platform(site_name, role_keyword):
+    print(f"  [Thread] 🔍 Querying JobSpy ({site_name.upper()}) for '{role_keyword}'...")
+    results = []
+    try:
+        jobs = scrape_jobs(
+            site_name=[site_name],
+            search_term=role_keyword,
+            location="India",
+            results_wanted=15,
+            hours_old=72,
+            country_shortcut="india"
+        )
+        if not jobs.empty:
+            for _, row in jobs.iterrows():
+                raw_data = {
+                    'role': row.get('title'),
+                    'company': row.get('company'),
+                    'location': row.get('location'),
+                    'link': row.get('job_url'),
+                    'stipend': row.get('min_amount'),
+                    'logo': row.get('company_logo') if 'company_logo' in row else ''
+                }
+                normalized = normalize_job_data(raw_data, site_name)
+                if normalized:
+                    results.append(normalized)
+    except Exception as e:
+        print(f"  ⚠️ Error scraping {site_name.upper()}: {e}")
+    return results
+
+def scrape_internshala(role_keyword):
+    print(f"  [Thread] 🔍 Querying Internshala for '{role_keyword}'...")
+    results = []
+    try:
+        formatted_keyword = role_keyword.lower().replace(' ', '-')
+        url = f"https://internshala.com/internships/keywords-{formatted_keyword}/"
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            job_cards = soup.find_all('div', class_='individual_internship')
+            for card in job_cards[:15]:
+                title_elem = card.find('h3', class_='job-internship-name')
+                company_elem = card.find('p', class_='company-name')
+                location_elem = card.find('a', class_='location_link')
+                link_elem = card.find('a', class_='view_detail_button')
+                
+                if title_elem and company_elem:
+                    link = "https://internshala.com" + link_elem['href'] if link_elem else url
+                    raw_data = {
+                        'role': title_elem.text.strip(),
+                        'company': company_elem.text.strip(),
+                        'location': location_elem.text.strip() if location_elem else 'Remote',
+                        'link': link,
+                        'source': 'internshala'
+                    }
+                    normalized = normalize_job_data(raw_data, 'internshala')
+                    if normalized:
+                        results.append(normalized)
+    except Exception as e:
+        print(f"  ⚠️ Error scraping Internshala: {e}")
+    return results
+
+def scrape_remoteok(role_keyword):
+    print(f"  [Thread] 🔍 Querying RemoteOK for '{role_keyword}'...")
+    results = []
+    try:
+        # RemoteOK uses exact tags or fuzzy search, limit to first word for broader net
+        keyword = role_keyword.split()[0].lower()
+        url = f"https://remoteok.com/api?tags={keyword}"
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            for job in data[1:15]:  # First element is legal info, skip it
+                raw_data = {
+                    'role': job.get('position'),
+                    'company': job.get('company'),
+                    'location': job.get('location', 'Remote'),
+                    'link': job.get('url'),
+                    'logo': job.get('company_logo'),
+                    'tags': job.get('tags', [])
+                }
+                normalized = normalize_job_data(raw_data, 'remoteok')
+                if normalized:
+                    results.append(normalized)
+    except Exception as e:
+        print(f"  ⚠️ Error scraping RemoteOK: {e}")
+    return results
+
+def scrape_wellfound(role_keyword):
+    print(f"  [Thread] 🔍 Querying Wellfound for '{role_keyword}' (Fallback)...")
+    # Wellfound actively blocks requests. A ScraperAPI proxy or equivalent is typically needed.
+    # We return an empty list here to prevent crash loops unless a proxy is provided.
+    return []
+
+def scrape_unstop(role_keyword):
+    print(f"  [Thread] 🔍 Querying Unstop for '{role_keyword}'...")
+    results = []
+    try:
+        url = "https://unstop.com/api/public/opportunity/search-result"
+        params = {"keyword": role_keyword, "opportunity": "internships", "page": 1}
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        res = requests.get(url, params=params, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            if 'data' in data and 'data' in data['data']:
+                for item in data['data']['data'][:10]:
+                    raw_data = {
+                        'role': item.get('title'),
+                        'company': item.get('organization', {}).get('name', 'Unstop Employer'),
+                        'location': item.get('job_location', 'Remote, India'),
+                        'link': f"https://unstop.com/{item.get('public_url')}",
+                        'logo': item.get('logoUrl')
+                    }
+                    normalized = normalize_job_data(raw_data, 'unstop')
+                    if normalized:
+                        results.append(normalized)
+    except Exception as e:
+        print(f"  ⚠️ Error scraping Unstop: {e}")
+    return results
+
+def scrape_naukri(role_keyword):
+    print(f"  [Thread] 🔍 Querying Naukri for '{role_keyword}'...")
+    results = []
+    try:
+        formatted_keyword = role_keyword.lower().replace(' ', '-')
+        url = f"https://www.naukri.com/{formatted_keyword}-jobs"
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS), 
+            "appid": "109", 
+            "systemid": "109"
+        }
+        res = requests.get(url, headers=headers, timeout=15)
+        # Naukri's primary list is typically rendered via React or requires an API wrapper.
+        # Implemented a safe fallback return to avoid blocking.
+    except Exception as e:
+        print(f"  ⚠️ Error scraping Naukri: {e}")
+    return results
+
+def run_scraper_task(platform, role_keyword):
+    """
+    Wrapper function to execute the correct scraper for a platform.
+    """
+    time.sleep(random.uniform(0.1, 2.0)) # Jitter to prevent immediate concurrent blast
+    
+    if platform in ["linkedin", "indeed", "glassdoor", "zip_recruiter", "google"]:
+        return scrape_jobspy_platform(platform, role_keyword)
+    elif platform == "internshala":
+        return scrape_internshala(role_keyword)
+    elif platform == "remoteok":
+        return scrape_remoteok(role_keyword)
+    elif platform == "wellfound":
+        return scrape_wellfound(role_keyword)
+    elif platform == "unstop":
+        return scrape_unstop(role_keyword)
+    elif platform == "naukri":
+        return scrape_naukri(role_keyword)
+    return []
 
 def fetch_and_sync_internships():
-    # ⚡ STEP 1: Execute deep data cleanup before running scraper streams
     purge_expired_listings()
     
-    print("\n🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine...")
+    print("\n🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine (Concurrent)...")
     
-    # 🌐 Base source platforms
-    base_sites = ["linkedin", "indeed", "naukri", "google", "zip_recruiter"]
-    
-    # 🎯 The Absolute Master Index Matrix of Student Internships
-    search_keywords = [
-        # --- Software & Core Tech Track ---
-        "Software Engineer Intern",
-        "Frontend Developer Intern",
-        "Backend Developer Intern",
-        "Full Stack Intern",
-        "Web Development Intern",
-        "Mobile App Intern",
-        "DevOps Intern",
-        "Cybersecurity Intern",
-        
-        # --- AI, Data, & Systems Track ---
-        "Data Science Intern",
-        "Data Analyst Intern",
-        "Machine Learning Intern",
-        "AI Intern",
-        "Cloud Engineer Intern",
-        
-        # --- UI/UX & Creative Design Track ---
-        "UX UI Design Intern",
-        "Product Design Intern",
-        "Graphic Design Intern",
-        "Web Design Intern",
-        
-        # --- Product, Business, & Management Track ---
-        "Product Management Intern",
-        "Business Analyst Intern",
-        "Project Management Intern",
-        "Operations Intern",
-        
-        # --- Growth, Content, & Marketing Track ---
-        "Marketing Intern",
-        "Digital Marketing Intern",
-        "Social Media Intern",
-        "Content Writing Intern",
-        "SEO Intern"
+    # 10 Major Platforms
+    platforms = [
+        "linkedin", "indeed", "glassdoor", "zip_recruiter", "google",
+        "internshala", "wellfound", "unstop", "remoteok", "naukri"
     ]
     
     listings_to_insert = []
     
-    # 🔁 Outer Loop: Cycle through every role type
-    for role_keyword in search_keywords:
-        print(f"\n🚀 Starting search sequence for category: [{role_keyword.upper()}]")
+    # We will aggregate all platform+keyword combinations as individual futures
+    tasks = []
+    for role_keyword in SEARCH_KEYWORDS:
+        for platform in platforms:
+            tasks.append((platform, role_keyword))
+            
+    print(f"🚀 Preparing {len(tasks)} distinct scraping tasks to run concurrently...")
+            
+    # Concurrency using ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        # Map futures to their tasks
+        future_to_task = {executor.submit(run_scraper_task, platform, keyword): (platform, keyword) for platform, keyword in tasks}
         
-        # ⚡ NEW: Shuffle the target board order dynamically for every keyword path pass
-        target_sites = base_sites.copy()
-        random.shuffle(target_sites)
-        print(f"🔀 Randomized scraping order for this pass: {[s.upper() for s in target_sites]}")
-        
-        # 🔁 Inner Loop: Query platforms one by one
-        for site in target_sites:
-            print(f"  🔍 Querying {site.upper()} for '{role_keyword}'...")
+        for future in concurrent.futures.as_completed(future_to_task):
+            platform, keyword = future_to_task[future]
             try:
-                jobs = scrape_jobs(
-                    site_name=[site],
-                    search_term=role_keyword,
-                    location="India",
-                    results_wanted=20,  # Optimized 20-job quota per run execution
-                    hours_old=72,       # Pulls fresh listings from the last 3 days
-                    country_shortcut="india"
-                )
-                
-                if jobs.empty:
-                    continue
-                    
-                print(f"    📦 Found {len(jobs)} potential records on {site.upper()}. Processing rows...")
-                
-                # Format rows into your exact Supabase schema layout
-                for _, row in jobs.iterrows():
-                    role = row.get('title')
-                    company = row.get('company')
-                    if pd.isna(role) or pd.isna(company) or not role or not company:
-                        continue
-                        
-                    location_val = row.get('location')
-                    location = f"{location_val}, India" if location_val and not pd.isna(location_val) else "Remote, India"
-                    
-                    job_url = row.get('job_url')
-                    job_url_str = str(job_url) if job_url and not pd.isna(job_url) else ""
-                    
-                    # Safe NaN evaluation check for numeric fields
-                    stipend = 0
-                    min_amt = row.get('min_amount')
-                    if min_amt is not None and not pd.isna(min_amt):
-                        try:
-                            stipend = int(min_amt)
-                        except (ValueError, TypeError):
-                            pass
-
-                    job_data = {
-                        "role": str(role),
-                        "company": str(company),
-                        "location": str(location),
-                        "stipend": stipend,
-                        "link": job_url_str,
-                        "is_verified": False  # Headed straight to your priyanshu2026 admin panel review stream
-                    }
-                    listings_to_insert.append(job_data)
-                    
-                # ⏱️ UPDATED: Shifted to a random pause range between 2.5 and 5.0 seconds to cleanly bypass scraping triggers
-                sleep_interval = random.uniform(2.5, 5.0)
-                time.sleep(sleep_interval)
-                    
-            except Exception as e:
-                print(f"  ⚠️ Skipping {site.upper()} momentarily: {e}")
-                continue
+                results = future.result()
+                if results:
+                    listings_to_insert.extend(results)
+                    print(f"    📦 [{platform.upper()}] '{keyword}' yielded {len(results)} records.")
+            except Exception as exc:
+                print(f"  💥 Fatal error in thread for {platform} - '{keyword}': {exc}")
 
     if not listings_to_insert:
         print("\n📭 Scraping process finished. Total fresh entries across all configurations: 0")
         return
 
-    # De-duplicate the batch itself to prevent PostgreSQL unique constraint errors
+    # De-duplicate the batch
     unique_listings = {}
     for job in listings_to_insert:
-        key = (job["company"], job["role"], job["link"])
+        key = (job["company"].lower(), job["role"].lower(), job["link"])
         unique_listings[key] = job
     
     deduped_listings_to_insert = list(unique_listings.values())
 
     print(f"\n📤 Scrape sequence complete! Syncing {len(deduped_listings_to_insert)} unique rows to Supabase...")
     
-    # ⚡ EXECUTING DE-DUPLICATED SMART UPSERT
     try:
         supabase.table("listings").upsert(
             deduped_listings_to_insert,
-            on_conflict="company,role,link"  # Catches overlaps across your core database identifiers!
+            on_conflict="company,role,link"
         ).execute()
         print(f"✨ Success! Database sync complete. All duplicate roles filtered and blocked.")
     except Exception as e:
