@@ -63,7 +63,7 @@ USER_AGENTS = [
 def purge_expired_listings():
     print("\n🧹 Initiating Expired Link Validation & Purge Cycle...")
     try:
-        response = supabase.table("listings").select("id", "role", "company", "link").execute()
+        response = supabase.table("listings").select("id", "role", "company", "link", "is_verified").execute()
         active_listings = response.data
         
         if not active_listings:
@@ -74,6 +74,10 @@ def purge_expired_listings():
         dead_row_ids = []
 
         for item in active_listings:
+            # Skip manual posts made by admin through dashboard so they never auto-delete
+            if item.get("is_verified") == True:
+                continue
+
             url = item.get("link")
             row_id = item.get("id")
             
@@ -115,10 +119,6 @@ def purge_expired_listings():
         print(f"⚠️ Link validation manager crashed: {e}")
 
 def normalize_job_data(raw_data, source_platform):
-    """
-    Cleans and formats wildly different incoming fields into our standard Supabase schema.
-    Returns None if required fields are missing.
-    """
     try:
         role = str(raw_data.get('role', '')).strip()
         company = str(raw_data.get('company', '')).strip()
@@ -142,7 +142,6 @@ def normalize_job_data(raw_data, source_platform):
         raw_stipend = raw_data.get('stipend', 0)
         try:
             if raw_stipend and str(raw_stipend).lower() != 'nan':
-                # Remove currency symbols and commas if present
                 clean_stipend = str(raw_stipend).replace(',', '').replace('₹', '').replace('$', '')
                 stipend = int(float(clean_stipend))
         except (ValueError, TypeError):
@@ -231,14 +230,13 @@ def scrape_remoteok(role_keyword):
     print(f"  [Thread] 🔍 Querying RemoteOK for '{role_keyword}'...")
     results = []
     try:
-        # RemoteOK uses exact tags or fuzzy search, limit to first word for broader net
         keyword = role_keyword.split()[0].lower()
         url = f"https://remoteok.com/api?tags={keyword}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
         res = requests.get(url, headers=headers, timeout=15)
         if res.status_code == 200:
             data = res.json()
-            for job in data[1:15]:  # First element is legal info, skip it
+            for job in data[1:15]:
                 raw_data = {
                     'role': job.get('position'),
                     'company': job.get('company'),
@@ -256,8 +254,6 @@ def scrape_remoteok(role_keyword):
 
 def scrape_wellfound(role_keyword):
     print(f"  [Thread] 🔍 Querying Wellfound for '{role_keyword}' (Fallback)...")
-    # Wellfound actively blocks requests. A ScraperAPI proxy or equivalent is typically needed.
-    # We return an empty list here to prevent crash loops unless a proxy is provided.
     return []
 
 def scrape_unstop(role_keyword):
@@ -288,28 +284,10 @@ def scrape_unstop(role_keyword):
 
 def scrape_naukri(role_keyword):
     print(f"  [Thread] 🔍 Querying Naukri for '{role_keyword}'...")
-    results = []
-    try:
-        formatted_keyword = role_keyword.lower().replace(' ', '-')
-        url = f"https://www.naukri.com/{formatted_keyword}-jobs"
-        headers = {
-            "User-Agent": random.choice(USER_AGENTS), 
-            "appid": "109", 
-            "systemid": "109"
-        }
-        res = requests.get(url, headers=headers, timeout=15)
-        # Naukri's primary list is typically rendered via React or requires an API wrapper.
-        # Implemented a safe fallback return to avoid blocking.
-    except Exception as e:
-        print(f"  ⚠️ Error scraping Naukri: {e}")
-    return results
+    return []
 
 def run_scraper_task(platform, role_keyword):
-    """
-    Wrapper function to execute the correct scraper for a platform.
-    """
-    time.sleep(random.uniform(0.1, 2.0)) # Jitter to prevent immediate concurrent blast
-    
+    time.sleep(random.uniform(0.1, 2.0))
     if platform in ["linkedin", "indeed", "glassdoor", "zip_recruiter", "google"]:
         return scrape_jobspy_platform(platform, role_keyword)
     elif platform == "internshala":
@@ -325,19 +303,17 @@ def run_scraper_task(platform, role_keyword):
     return []
 
 def fetch_and_sync_internships():
+    # 1. Clean out dead links from the current database first
     purge_expired_listings()
     
     print("\n🛰️ Initializing Master Multi-Role & Multi-Site Scraper Engine (Concurrent)...")
     
-    # 10 Major Platforms
     platforms = [
         "linkedin", "indeed", "glassdoor", "zip_recruiter", "google",
         "internshala", "wellfound", "unstop", "remoteok", "naukri"
     ]
     
     listings_to_insert = []
-    
-    # We will aggregate all platform+keyword combinations as individual futures
     tasks = []
     for role_keyword in SEARCH_KEYWORDS:
         for platform in platforms:
@@ -345,9 +321,7 @@ def fetch_and_sync_internships():
             
     print(f"🚀 Preparing {len(tasks)} distinct scraping tasks to run concurrently...")
             
-    # Concurrency using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        # Map futures to their tasks
         future_to_task = {executor.submit(run_scraper_task, platform, keyword): (platform, keyword) for platform, keyword in tasks}
         
         for future in concurrent.futures.as_completed(future_to_task):
@@ -364,7 +338,7 @@ def fetch_and_sync_internships():
         print("\n📭 Scraping process finished. Total fresh entries across all configurations: 0")
         return
 
-    # De-duplicate the batch
+    # De-duplicate the new scraped batch
     unique_listings = {}
     for job in listings_to_insert:
         key = (job["company"].lower(), job["role"].lower(), job["link"])
@@ -375,13 +349,16 @@ def fetch_and_sync_internships():
     print(f"\n📤 Scrape sequence complete! Syncing {len(deduped_listings_to_insert)} unique rows to Supabase...")
     
     try:
-        supabase.table("listings").upsert(
-            deduped_listings_to_insert,
-            on_conflict="company,role,link"
-        ).execute()
-        print(f"✨ Success! Database sync complete. All duplicate roles filtered and blocked.")
+        # 🚨 THE REFACTOR TRICK: Drop old automated entries right before saving the fresh batch
+        # This keeps user-posted test items intact ('is_verified' == true) but purges stale scraped ones
+        print("🧹 Flushing unverified automated listings to clear out expired entries...")
+        supabase.table("listings").delete().eq("is_verified", False).execute()
+        
+        # 2. Insert the brand new, updated crop of jobs
+        supabase.table("listings").insert(deduped_listings_to_insert).execute()
+        print(f"✨ Success! Database sync complete. Stale entries replaced with live postings.")
     except Exception as e:
-        print(f"❌ Database insertion failed: {e}")
+        print(f"❌ Database synchronization batch write failed: {e}")
 
 if __name__ == "__main__":
     fetch_and_sync_internships()
